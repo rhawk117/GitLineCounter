@@ -12,34 +12,48 @@ param(
     [string]$program_path,
 
     [Parameter(Mandatory = $false)]
-    [switch]$Verbose
+    [switch]$v
 )
 
 function Show-Help {
-    Write-Host "Man I love git measuring with my friends!"
+    Write-Host "   ____ _ _      __  __                          "
+    Write-Host "  / ___(_) |_ ___\ \/ /___ _ __   ___  _ __ ___  "
+    Write-Host " | |  _| | __/ _ \\  // _ \ '_ \ / _ \| '_ \` _ \ "
+    Write-Host " | |_| | | ||  __//  \  __/ | | | (_) | | | | | |"
+    Write-Host "  \____|_|\__\___/_/\_\___|_| |_|\___/|_| |_| |_|"
+    Write-Host "                Find out who has the" 
+    Write-Host "                   biggest git."
+    Write-Host
+    
     Write-Host "Usage:"
-    Write-Host "  -help"
+    Write-Host "  git-measure -help"
     Write-Host "      Display this help message."
     Write-Host
-    Write-Host "  -program_path <Directory>"
+    Write-Host "  git-measure -program_path <Directory>"
     Write-Host "      Adds the specified directory to the PATH environment variable."
+    Write-Host "      If not provided, the script's directory is used."
     Write-Host
-    Write-Host "  -a <Author> -path <GitRepositoryPath> [-Verbose]"
+    Write-Host "  git-measure -a <Author> -path <GitRepositoryPath> [-v]"
     Write-Host "      Counts the total lines added and removed by the specified author."
-    Write-Host "      If -Verbose is used, also shows average insertions/deletions per commit and the ratio."
+    Write-Host "      If -v is used, also shows average insertions/deletions per commit and the ratio."
     Write-Host
     Write-Host "Example Usage:"
-    Write-Host "  .\git-measuring.ps1 -help"
-    Write-Host "  .\git-measuring.ps1 -a 'Freak Bob' -path 'C:\Projects\MyApp'"
-    Write-Host "  .\git-measuring.ps1 -a 'Freak Bob' -path 'C:\Projects\MyApp' -Verbose"
-    Write-Host "  .\git-measuring.ps1 -program_path 'C:\MyTools'"
+    Write-Host "  git-measure -help"
+    Write-Host "  git-measure -a 'Freak Bob' -path 'C:\Projects\MyApp'"
+    Write-Host "  git-measure -a 'Freak Bob' -path 'C:\Projects\MyApp' -v"
+    Write-Host "  git-measure -program_path 'C:\MyTools'"
 }
 
 function Set-ProgramPath($ProgramPath) {
+    if (-not $ProgramPath) {
+        $ProgramPath = Split-Path $PSCommandPath
+    }
+
     if (-not (Test-Path $ProgramPath)) {
         Write-Error "The specified directory '$ProgramPath' does not exist."
         exit 1
     }
+
     $currentPath = [System.Environment]::GetEnvironmentVariable('Path', 'User')
     if ($currentPath -notlike "*$ProgramPath*") {
         $newPath = "$currentPath;$ProgramPath"
@@ -73,9 +87,7 @@ function Get-AllAuthorStats($ProjectPath) {
         return @{}
     }
 
-    # { AuthorName => {Added, Deleted, Commits} }
     $authorData = [ordered]@{}
-
     $currentAuthor = $null
     $inCommit = $false
 
@@ -96,7 +108,7 @@ function Get-AllAuthorStats($ProjectPath) {
             }
             $authorData[$currentAuthor].Commits += 1
             $inCommit = $false
-            continue
+            continue 
         }
         $fields = $line -split "`t"
         if ($fields.Count -eq 3) {
@@ -107,6 +119,7 @@ function Get-AllAuthorStats($ProjectPath) {
             $authorData[$currentAuthor].Deleted += $del
         }
     }
+
     return $authorData
 }
 
@@ -167,19 +180,22 @@ function Show-Output($Result, $VerboseMode) {
     Write-Host "Total lines deleted:  $($Result.Deleted)"
     Write-Host "Net contribution:     $($Result.Net)"
 
-    if ($VerboseMode -and $Result.Commits -gt 0) {
-        $avgAdd = [math]::Round($Result.Added / $Result.Commits, 2)
-        $avgDel = [math]::Round($Result.Deleted / $Result.Commits, 2)
-        $ratio = if ($Result.Deleted -eq 0) { "N/A" } else { [math]::Round($Result.Added / $Result.Deleted, 2) }
+    if ($VerboseMode) {
+        if ($Result.Commits -gt 0) {
+            $avgAdd = [math]::Round($Result.Added / $Result.Commits, 2)
+            $avgDel = [math]::Round($Result.Deleted / $Result.Commits, 2)
+            $ratio = if ($Result.Deleted -eq 0) { "N/A" } else { [math]::Round($Result.Added / $Result.Deleted, 2) }
 
-        Write-Host "Commits by author:    $($Result.Commits)"
-        Write-Host "Avg insertions/commit:$avgAdd"
-        Write-Host "Avg deletions/commit: $avgDel"
-        Write-Host "Ratio (Lines:Del):    $ratio"
+            Write-Host "Commits by author:    $($Result.Commits)"
+            Write-Host "Avg insertions/commit:$avgAdd"
+            Write-Host "Avg deletions/commit: $avgDel"
+            Write-Host "Ratio (Lines:Del):    $ratio"
+        }
     }
 
+    $rank = Get-AuthorRank $Result.Author $Result.AllAuthors
     if ($null -ne $rank) {
-        Write-Host "[Ranking] (by net contribution) - $rank"
+        Write-Host "Author rank by net contribution: $rank"
     }
     else {
         Write-Host "Author rank could not be determined."
@@ -191,14 +207,14 @@ if ($help) {
     exit 0
 }
 
-if ($program_path) {
+if ($program_path -or $PSBoundParameters.ContainsKey('program_path')) {
     Set-ProgramPath $program_path
     exit 0
 }
 
 if ($a -and $path) {
     $result = Get-LinesCountForAuthor -Author $a -ProjectPath $path
-    Show-Output $result $Verbose
+    Show-Output $result $v
     exit 0
 }
 
